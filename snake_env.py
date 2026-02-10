@@ -31,13 +31,18 @@ class SnakeEnv(gym.Env):
     Grid is GRID_SIZE x GRID_SIZE. Snake and food are coordinates (row, col).
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"]}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 15}
 
-    def __init__(self, render_mode=None):
+    def __init__(self, grid_size=10, max_steps=500, render_mode=None, cell_px=32):
         super().__init__()
 
-        self.grid_size = GRID_SIZE
+        # NOTE: use the passed-in params (was previously ignored)
+        self.grid_size = int(grid_size)
+        self.max_steps = int(max_steps)
         self.render_mode = render_mode
+        self.cell_px = cell_px
+        self._window = None
+        self._clock = None
 
         # Action space: 4 discrete actions (up, right, down, left)
         self.action_space = spaces.Discrete(4)
@@ -103,13 +108,19 @@ class SnakeEnv(gym.Env):
             self.score += 1
             self.food = self._spawn_food()
             obs = self._get_obs()
-            return obs, REWARD_FOOD + REWARD_STEP, False, False, {"score": self.score}
+            reward = REWARD_FOOD + REWARD_STEP
+            terminated = False
+            truncated = self.steps >= self.max_steps
+            return obs, reward, terminated, truncated, {"score": self.score}
 
         # 5. Normal move: add new head, remove tail
         self.snake = [new_head] + self.snake[:-1]
 
         obs = self._get_obs()
-        return obs, REWARD_STEP, False, False, {"score": self.score}
+        reward = REWARD_STEP
+        terminated = False
+        truncated = self.steps >= self.max_steps
+        return obs, reward, terminated, truncated, {"score": self.score}
 
     def _spawn_food(self):
         """Place food on an empty cell (not on snake)."""
@@ -140,9 +151,89 @@ class SnakeEnv(gym.Env):
         return obs, reward, True, truncated, {"score": self.score}
 
     def render(self):
-        """Optional: print ASCII grid to console."""
-        grid = [["·" for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        """
+        Render the environment.
 
+        - render_mode=None: ASCII print (simple debug)
+        - render_mode="human": pygame window
+        - render_mode="rgb_array": returns an RGB array (H, W, 3)
+        """
+        if self.render_mode in ("human", "rgb_array"):
+            try:
+                import pygame
+            except Exception as e:  # pragma: no cover
+                raise ImportError(
+                    "pygame is required for render_mode='human'/'rgb_array'. "
+                    "Install it with: pip install pygame"
+                ) from e
+
+            cell = int(self.cell_px)
+            width = self.grid_size * cell
+            height = self.grid_size * cell
+
+            if self._window is None:
+                pygame.init()
+                if self.render_mode == "human":
+                    pygame.display.init()
+                    self._window = pygame.display.set_mode((width, height))
+                    pygame.display.set_caption("Snake RL (evaluation)")
+                else:
+                    self._window = pygame.Surface((width, height))
+                self._clock = pygame.time.Clock()
+
+            # Keep window responsive
+            if self.render_mode == "human":
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.close()
+                        return None
+
+            # Colors
+            bg = (20, 20, 20)
+            grid_line = (40, 40, 40)
+            snake_body = (0, 180, 80)
+            snake_head = (0, 240, 120)
+            food = (220, 70, 70)
+
+            surf = self._window
+            surf.fill(bg)
+
+            # Grid lines
+            for i in range(self.grid_size + 1):
+                pygame.draw.line(surf, grid_line, (0, i * cell), (width, i * cell), 1)
+                pygame.draw.line(surf, grid_line, (i * cell, 0), (i * cell, height), 1)
+
+            # Food
+            fr, fc = self.food
+            pygame.draw.rect(
+                surf,
+                food,
+                pygame.Rect(fc * cell + 2, fr * cell + 2, cell - 4, cell - 4),
+                border_radius=4,
+            )
+
+            # Snake
+            for idx, (r, c) in enumerate(self.snake):
+                color = snake_head if idx == 0 else snake_body
+                pygame.draw.rect(
+                    surf,
+                    color,
+                    pygame.Rect(c * cell + 2, r * cell + 2, cell - 4, cell - 4),
+                    border_radius=4,
+                )
+
+            if self.render_mode == "human":
+                pygame.display.flip()
+                if self._clock is not None:
+                    self._clock.tick(self.metadata.get("render_fps", 15))
+                return None
+
+            # rgb_array
+            arr = pygame.surfarray.array3d(surf)  # (W, H, 3)
+            return np.transpose(arr, (1, 0, 2))  # (H, W, 3)
+
+        # Default: ASCII print for debugging
+        grid = [["·" for _ in range(self.grid_size)] for _ in range(self.grid_size)]
         for r, c in self.snake:
             grid[r][c] = "█"
         grid[self.snake[0][0]][self.snake[0][1]] = "●"  # head
@@ -151,6 +242,22 @@ class SnakeEnv(gym.Env):
         lines = [" ".join(row) for row in grid]
         print("\n".join(lines))
         print(f"Score: {self.score}\n")
+        return None
+
+    def close(self):
+        """Close any render resources (pygame window)."""
+        if self._window is None:
+            return
+        try:
+            import pygame
+
+            pygame.display.quit()
+            pygame.quit()
+        except Exception:
+            pass
+        finally:
+            self._window = None
+            self._clock = None
 
 
 # --- Quick test ---
