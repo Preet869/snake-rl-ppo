@@ -22,7 +22,9 @@ ACTION_DELTAS = {
 # Reward shaping
 REWARD_FOOD = 1.0
 REWARD_DEATH = -1.0
-REWARD_STEP = -0.01  # step penalty — encourages efficiency
+REWARD_STEP = -0.02  # slightly stronger step penalty — discourages wandering
+REWARD_TOWARD_FOOD = 0.004  # small bonus when moving closer to food
+REWARD_AWAY_FROM_FOOD = -0.004  # small penalty when moving further away
 
 
 class SnakeEnv(gym.Env):
@@ -62,6 +64,7 @@ class SnakeEnv(gym.Env):
         self.food: tuple[int, int] = (0, 0)
         self.score: int = 0
         self.steps: int = 0
+        self.steps_since_food: int = 0
 
     def reset(self, seed=None, options=None):
         """Start a new game."""
@@ -73,6 +76,7 @@ class SnakeEnv(gym.Env):
         self.food = self._spawn_food()
         self.score = 0
         self.steps = 0
+        self.steps_since_food = 0
 
         obs = self._get_obs()
         info = {"score": self.score}
@@ -88,6 +92,7 @@ class SnakeEnv(gym.Env):
         5. Else → just move (tail shrinks)
         """
         self.steps += 1
+        self.steps_since_food += 1
 
         # 1. Compute new head position
         head_row, head_col = self.snake[0]
@@ -102,11 +107,16 @@ class SnakeEnv(gym.Env):
         if new_head in self.snake[:-1]:  # exclude current tail (it will move)
             return self._done(obs=self._get_obs(), reward=REWARD_DEATH, truncated=False)
 
+        # For shaping: distance to food before and after moving
+        old_dist = abs(head_row - self.food[0]) + abs(head_col - self.food[1])
+        new_dist = abs(new_head[0] - self.food[0]) + abs(new_head[1] - self.food[1])
+
         # 4. Food?
         if new_head == self.food:
             self.snake = [new_head] + self.snake  # grow: add new head, keep body
             self.score += 1
             self.food = self._spawn_food()
+            self.steps_since_food = 0
             obs = self._get_obs()
             reward = REWARD_FOOD + REWARD_STEP
             terminated = False
@@ -118,8 +128,19 @@ class SnakeEnv(gym.Env):
 
         obs = self._get_obs()
         reward = REWARD_STEP
+
+        # Shaping: small bonus if we got closer to food, penalty if further
+        if new_dist < old_dist:
+            reward += REWARD_TOWARD_FOOD
+        elif new_dist > old_dist:
+            reward += REWARD_AWAY_FROM_FOOD
+
         terminated = False
-        truncated = self.steps >= self.max_steps
+        # Truncate if we take too many steps overall or we have been
+        # wandering too long without eating (prevents endless loops).
+        truncated = self.steps >= self.max_steps or self.steps_since_food >= int(
+            0.6 * self.max_steps
+        )
         return obs, reward, terminated, truncated, {"score": self.score}
 
     def _spawn_food(self):

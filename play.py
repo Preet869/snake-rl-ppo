@@ -32,8 +32,8 @@ def main() -> None:
     parser.add_argument(
         "--delay",
         type=float,
-        default=0.05,
-        help="Seconds to sleep between steps (slower = more visible)",
+        default=0.15,
+        help="Seconds to sleep between steps (increase to slow down)",
     )
     parser.add_argument(
         "--max-steps",
