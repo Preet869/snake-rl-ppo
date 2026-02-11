@@ -11,7 +11,7 @@ from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
 
 # --- Config ---
-TOTAL_TIMESTEPS = 500_000
+TOTAL_TIMESTEPS = 20_000_000
 MODEL_PATH = "snake_ppo.zip"
 TB_DIR = "./tb_snake"
 EVAL_FREQ = 10_000
