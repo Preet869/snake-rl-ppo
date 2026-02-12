@@ -39,5 +39,5 @@ python plot_weights.py --model snake_ppo.zip --out ./weight_viz
 
 - **Architecture**: MlpPolicy (fully connected)
 - **Training data**: 20 million timesteps
-- **Environment**: 10×10 grid, 500 max steps per episode
+- **Environment**: 10Ã—10 grid, 500 max steps per episode
 - **Rewards**: Food (+1), death (-1), distance shaping (toward/away from food)
