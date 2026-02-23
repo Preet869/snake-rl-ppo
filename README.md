@@ -8,7 +8,6 @@ Snake game trained with PPO (Proximal Policy Optimization) using [Stable-Baselin
 pip install gymnasium numpy stable-baselines3 pygame tensorboard
 ```
 
-
 ## Train
 
 ```bash
